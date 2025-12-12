@@ -234,15 +234,11 @@ export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
           </label>
           {repeatWeekly && (
             <>
-              <label htmlFor="weeks-count" style={{whiteSpace: "nowrap"}}
-                >
+              <label htmlFor="weeks-count" style={{whiteSpace: "nowrap"}}>
                 Number of weeks:
               </label>
-              <input
+              <select
                 id="weeks-count"
-                type="number"
-                min={1}
-                max={4}
                 value={weeksCount}
                 onChange={(e) => {
                   const value = Number(e.target.value);
@@ -250,8 +246,14 @@ export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
                     setWeeksCount(Math.min(4, Math.max(1, value)));
                   }
                 }}
-                style={{width: "70px"}}
-              />
+                style={{width: "80px", padding: "0.2rem"}}
+              >
+                {[1, 2, 3, 4].map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </>
           )}
         </div>
@@ -394,7 +396,6 @@ export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
     </div>
   );
 };
-
 
 
 

@@ -44,12 +44,9 @@ dependencies {
 application {
     mainClass = "com.seatly.ApplicationKt"
 }
+
 java {
     sourceCompatibility = JavaVersion.toVersion("17")
-}
-
-kotlin {
-    jvmToolchain(17)
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
@@ -80,5 +77,4 @@ micronaut {
         replaceLogbackXml = true
     }
 }
-
 
