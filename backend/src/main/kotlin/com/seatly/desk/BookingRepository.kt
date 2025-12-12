@@ -9,10 +9,12 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.UniqueConstraint
 import java.time.LocalDateTime
 
 @Repository
 interface BookingRepository : JpaRepository<Booking, Long> {
+  // TODO: add DB-level exclusion constraint to prevent overlapping intervals.
   @Query(
     """
         SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END
@@ -45,7 +47,12 @@ interface BookingRepository : JpaRepository<Booking, Long> {
 }
 
 @Entity
-@Table(name = "booking")
+@Table(
+  name = "booking",
+  uniqueConstraints = [
+    UniqueConstraint(columnNames = ["desk_id", "start_at"]),
+  ],
+)
 data class Booking(
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -58,4 +65,8 @@ data class Booking(
   val startAt: LocalDateTime = LocalDateTime.now(),
   @Column(name = "end_at", nullable = false)
   val endAt: LocalDateTime = LocalDateTime.now(),
+  @Column(name = "created_at", nullable = false)
+  val createdAt: LocalDateTime = LocalDateTime.now(),
+  @Column(name = "updated_at", nullable = false)
+  val updatedAt: LocalDateTime = LocalDateTime.now(),
 )
