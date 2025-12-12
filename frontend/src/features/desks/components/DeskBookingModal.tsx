@@ -45,7 +45,7 @@ function formatTimeRange(slot: AvailabilitySlot): string {
   const endHours = pad(end.getHours());
   const endMinutes = pad(end.getMinutes());
 
-  return `${startHours}:${startMinutes} – ${endHours}:${endMinutes}`;
+  return `${startHours}:${startMinutes} -> ${endHours}:${endMinutes}`;
 }
 
 export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
@@ -55,6 +55,8 @@ export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
                                                                   }) => {
   const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = React.useState<Date>(() => new Date());
+  const [repeatWeekly, setRepeatWeekly] = React.useState(false);
+  const [weeksCount, setWeeksCount] = React.useState(4);
 
   const start = React.useMemo(
     () =>
@@ -110,10 +112,20 @@ export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
   const handleBookSlot = async (slot: AvailabilitySlot) => {
     setBookingError(null);
     try {
+      const effectiveWeeks = Math.min(4, Math.max(1, weeksCount));
+      const recurrence =
+        repeatWeekly && effectiveWeeks > 1
+          ? {
+            type: "WEEKLY" as const,
+            occurrences: effectiveWeeks - 1,
+          }
+          : undefined;
+
       await bookingMutation.mutateAsync({
         deskId: desk.id,
         startAt: slot.startAt,
         endAt: slot.endAt,
+        recurrence,
       });
 
       // Refresh availability after successful booking
@@ -143,6 +155,8 @@ export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
     if (isOpen) {
       setSelectedDate(new Date());
       setBookingError(null);
+      setRepeatWeekly(false);
+      setWeeksCount(4);
     }
   }, [isOpen]);
 
@@ -196,8 +210,50 @@ export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
             style={{padding: "0.25rem 0.4rem"}}
           />
           <span style={{marginLeft: "auto"}}>
-            Showing availability 09:00 – 17:00
+            Showing availability 09:00 - 17:00
           </span>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            marginBottom: "0.75rem",
+            fontSize: "0.9rem",
+          }}
+        >
+          <label style={{display: "flex", alignItems: "center", gap: "0.4rem"}}
+            >
+            <input
+              type="checkbox"
+              checked={repeatWeekly}
+              onChange={(e) => setRepeatWeekly(e.target.checked)}
+              disabled={bookingMutation.isPending}
+            />
+            Repeat weekly
+          </label>
+          {repeatWeekly && (
+            <>
+              <label htmlFor="weeks-count" style={{whiteSpace: "nowrap"}}
+                >
+                Number of weeks:
+              </label>
+              <input
+                id="weeks-count"
+                type="number"
+                min={1}
+                max={4}
+                value={weeksCount}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (!Number.isNaN(value)) {
+                    setWeeksCount(Math.min(4, Math.max(1, value)));
+                  }
+                }}
+                style={{width: "70px"}}
+              />
+            </>
+          )}
         </div>
 
         {isLoading && <p>Loading availability...</p>}
@@ -338,3 +394,7 @@ export const DeskBookingModal: React.FC<DeskBookingModalProps> = ({
     </div>
   );
 };
+
+
+
+

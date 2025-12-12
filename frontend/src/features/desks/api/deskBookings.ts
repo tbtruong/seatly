@@ -11,14 +11,37 @@ export type AvailabilitySlot = {
   status: AvailabilityStatus;
 };
 
+export type RecurrenceInput =
+  | {
+  type: "WEEKLY";
+  occurrences: number;
+}
+  | undefined;
+
 export type CreateBookingInput = {
   deskId: number;
   startAt: string;
   endAt: string;
+  recurrence?: RecurrenceInput;
 };
 
 type ApiError = {
   message?: string;
+};
+
+type ConflictResponse = {
+  message: string;
+  conflictAt?: string | null;
+};
+
+type BookingResponse = {
+  bookings: Array<{
+    id: number;
+    deskId: number;
+    userId: number;
+    startAt: string;
+    endAt: string;
+  }>;
 };
 
 async function fetchDeskAvailability(
@@ -90,12 +113,12 @@ export function useDeskAvailabilityQuery(
 async function createBooking(
   accessToken: string | null,
   input: CreateBookingInput,
-) {
+): Promise<BookingResponse> {
   if (!accessToken) {
     throw new Error("Not authenticated");
   }
 
-  const {deskId, startAt, endAt} = input;
+  const {deskId, startAt, endAt, recurrence} = input;
 
   const response = await fetch(`${API_BASE_URL}/desks/${deskId}/bookings`, {
     method: "POST",
@@ -103,15 +126,32 @@ async function createBooking(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({startAt, endAt}),
+    body: JSON.stringify({startAt, endAt, recurrence}),
   });
 
   if (!response.ok) {
+    let conflictBody: ConflictResponse | undefined;
     let errorBody: ApiError | undefined;
     try {
-      errorBody = (await response.json()) as ApiError;
+      if (response.status === 409 || response.status === 400) {
+        conflictBody = (await response.json()) as ConflictResponse;
+      } else {
+        errorBody = (await response.json()) as ApiError;
+      }
     } catch {
       // ignore parse error
+    }
+
+    if (response.status === 409 && conflictBody) {
+      const {message, conflictAt} = conflictBody;
+      const conflictMsg = conflictAt
+        ? `${message} (conflict at ${conflictAt})`
+        : message;
+      throw new Error(conflictMsg);
+    }
+
+    if (response.status === 400 && conflictBody) {
+      throw new Error(conflictBody.message);
     }
 
     const message =
@@ -123,7 +163,7 @@ async function createBooking(
     throw new Error(message);
   }
 
-  return await response.json();
+  return (await response.json()) as BookingResponse;
 }
 
 export function useCreateBookingMutation() {

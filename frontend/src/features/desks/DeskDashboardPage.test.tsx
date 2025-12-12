@@ -86,7 +86,7 @@ describe("DeskDashboardPage", () => {
     }
     const modalUtils = within(modal);
 
-    await modalUtils.findByText(/showing availability 09:00 – 17:00/i);
+    await modalUtils.findByText(/showing availability 09:00 - 17:00/i);
 
     const slotBookButtons = await modalUtils.findAllByRole("button", {
       name: /^book$/i,

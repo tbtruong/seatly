@@ -6,7 +6,7 @@ import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
 @Singleton
-class DeskManager(
+open class DeskManager(
   private val deskRepository: DeskRepository,
   private val bookingRepository: BookingRepository,
 ) {
@@ -79,7 +79,7 @@ class DeskManager(
   }
 
   @Transactional
-  fun createBooking(command: CreateBookingCommand): List<BookingDto> {
+  open fun createBooking(command: CreateBookingCommand): List<BookingDto> {
     require(command.startAt.isBefore(command.endAt)) {
       "startAt must be before endAt"
     }
@@ -125,7 +125,7 @@ class DeskManager(
     val additionalWeeks =
       when (recurrence?.type ?: RecurrenceType.NONE) {
         RecurrenceType.NONE -> 0
-        RecurrenceType.WEEKLY -> recurrence.occurrences
+        RecurrenceType.WEEKLY -> (recurrence?.occurrences ?: 0)
       }
 
     require(additionalWeeks in 0..3) {
