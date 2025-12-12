@@ -1,6 +1,7 @@
 package com.seatly.desk
 
 import jakarta.inject.Singleton
+import jakarta.transaction.Transactional
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
@@ -77,7 +78,8 @@ class DeskManager(
     return slots
   }
 
-  fun createBooking(command: CreateBookingCommand): BookingDto {
+  @Transactional
+  fun createBooking(command: CreateBookingCommand): List<BookingDto> {
     require(command.startAt.isBefore(command.endAt)) {
       "startAt must be before endAt"
     }
@@ -85,20 +87,57 @@ class DeskManager(
     val normalizedStart = command.startAt.truncatedTo(ChronoUnit.MINUTES)
     val normalizedEnd = command.endAt.truncatedTo(ChronoUnit.MINUTES)
 
-    if (bookingRepository.existsOverlappingBooking(command.deskId, normalizedStart, normalizedEnd)) {
-      throw IllegalStateException("Desk is already booked for the given time range")
+    require(normalizedStart.toLocalDate() == normalizedEnd.toLocalDate()) {
+      "startAt and endAt must be on the same day"
     }
 
-    val booking =
-      Booking(
-        deskId = command.deskId,
-        userId = command.userId,
-        startAt = normalizedStart,
-        endAt = normalizedEnd,
-      )
+    val slots = buildSlots(normalizedStart, normalizedEnd, command.recurrence)
 
-    val savedBooking = bookingRepository.save(booking)
-    return BookingDto.from(savedBooking)
+    slots.forEach { slot ->
+      if (bookingRepository.existsOverlappingBooking(command.deskId, slot.startAt, slot.endAt)) {
+        throw ConflictException(
+          conflictAt = slot.startAt,
+          message = "Desk is already booked for the given time range",
+        )
+      }
+    }
+
+    val savedBookings =
+      slots.map { slot ->
+        bookingRepository.save(
+          Booking(
+            deskId = command.deskId,
+            userId = command.userId,
+            startAt = slot.startAt,
+            endAt = slot.endAt,
+          ),
+        )
+      }
+
+    return savedBookings.map { BookingDto.from(it) }
+  }
+
+  private fun buildSlots(
+    startAt: LocalDateTime,
+    endAt: LocalDateTime,
+    recurrence: RecurrenceCommand?,
+  ): List<BookingSlot> {
+    val additionalWeeks =
+      when (recurrence?.type ?: RecurrenceType.NONE) {
+        RecurrenceType.NONE -> 0
+        RecurrenceType.WEEKLY -> recurrence.occurrences
+      }
+
+    require(additionalWeeks in 0..3) {
+      "Recurrence can extend up to 4 total weeks"
+    }
+
+    return (0..additionalWeeks).map { offset ->
+      BookingSlot(
+        startAt = startAt.plusWeeks(offset.toLong()),
+        endAt = endAt.plusWeeks(offset.toLong()),
+      )
+    }
   }
 }
 
@@ -152,6 +191,7 @@ data class CreateBookingCommand(
   val userId: Long,
   val startAt: LocalDateTime,
   val endAt: LocalDateTime,
+  val recurrence: RecurrenceCommand? = null,
 )
 
 data class BookingDto(
@@ -172,3 +212,18 @@ data class BookingDto(
       )
   }
 }
+
+data class RecurrenceCommand(
+  val type: RecurrenceType,
+  val occurrences: Int,
+)
+
+enum class RecurrenceType {
+  NONE,
+  WEEKLY,
+}
+
+private data class BookingSlot(
+  val startAt: LocalDateTime,
+  val endAt: LocalDateTime,
+)

@@ -12,15 +12,23 @@ import io.micronaut.security.annotation.Secured
 import io.micronaut.security.authentication.Authentication
 import io.micronaut.security.rules.SecurityRule
 import io.micronaut.serde.annotation.Serdeable
+import jakarta.persistence.PersistenceException
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
+import org.slf4j.LoggerFactory
 import java.time.LocalDateTime
 
 @Controller("/desks")
 open class DeskController(
   private val deskManager: DeskManager,
 ) {
+  private val logger = LoggerFactory.getLogger(DeskController::class.java)
+
+  // TODO: Consider extracting booking response/error handling into a dedicated component/service.
+
   @Post
   @Secured(SecurityRule.IS_AUTHENTICATED)
   open fun createDesk(
@@ -62,17 +70,68 @@ open class DeskController(
     authentication: Authentication,
     @PathVariable deskId: Long,
     @Body @Valid request: CreateBookingRequest,
-  ): HttpResponse<BookingResponse> {
-    val created =
-      deskManager.createBooking(
-        command =
-          request.toCommand(
-            deskId = deskId,
-            userId = authentication.name.toLong(),
-          ),
+  ): HttpResponse<*> {
+    return try {
+      val created =
+        deskManager.createBooking(
+          command =
+            request.toCommand(
+              deskId = deskId,
+              userId = authentication.name.toLong(),
+            ),
+        )
+      val body = BookingListResponse(created.map { BookingResponse.from(it) })
+      logger.info(
+        "booking_success deskId={} userId={} count={}",
+        deskId,
+        authentication.name,
+        created.size,
       )
-    val responseBody = BookingResponse.from(created)
-    return HttpResponse.created(responseBody)
+      HttpResponse.created(body)
+    } catch (ex: ConflictException) {
+      logger.warn(
+        "booking_conflict deskId={} userId={} message={}",
+        deskId,
+        authentication.name,
+        ex.message,
+      )
+      HttpResponse
+        .status<ConflictResponse>(HttpStatus.CONFLICT)
+        .body(
+          ConflictResponse(
+            message = ex.message ?: "Conflict detected",
+            conflictAt = ex.conflictAt,
+          ),
+        )
+    } catch (ex: PersistenceException) {
+      logger.warn(
+        "booking_persistence_conflict deskId={} userId={} message={}",
+        deskId,
+        authentication.name,
+        ex.message,
+      )
+      HttpResponse
+        .status<ConflictResponse>(HttpStatus.CONFLICT)
+        .body(
+          ConflictResponse(
+            message = "Desk is already booked for the given time range",
+            conflictAt = null,
+          ),
+        )
+    } catch (ex: IllegalArgumentException) {
+      logger.warn(
+        "booking_validation_error deskId={} userId={} message={}",
+        deskId,
+        authentication.name,
+        ex.message,
+      )
+      HttpResponse.badRequest(
+        ConflictResponse(
+          message = ex.message ?: "Invalid booking data",
+          conflictAt = null,
+        ),
+      )
+    }
   }
 }
 
@@ -127,6 +186,7 @@ data class CreateBookingRequest(
   val startAt: LocalDateTime,
   @field:NotNull
   val endAt: LocalDateTime,
+  val recurrence: RecurrenceRequest? = null,
 ) {
   fun toCommand(
     deskId: Long,
@@ -137,6 +197,7 @@ data class CreateBookingRequest(
       userId = userId,
       startAt = startAt,
       endAt = endAt,
+      recurrence = recurrence?.toCommand(),
     )
 }
 
@@ -157,5 +218,33 @@ data class BookingResponse(
         startAt = booking.startAt,
         endAt = booking.endAt,
       )
+  }
+}
+
+@Serdeable
+data class BookingListResponse(
+  val bookings: List<BookingResponse>,
+)
+
+@Serdeable
+data class ConflictResponse(
+  val message: String,
+  val conflictAt: LocalDateTime?,
+)
+
+@Serdeable
+data class RecurrenceRequest(
+  val type: RecurrenceType? = null,
+  @field:Min(0)
+  @field:Max(3)
+  val occurrences: Int? = null,
+) {
+  fun toCommand(): RecurrenceCommand? {
+    val recurrenceType = type ?: return null
+    val additional = occurrences ?: 0
+    return RecurrenceCommand(
+      type = recurrenceType,
+      occurrences = additional,
+    )
   }
 }
