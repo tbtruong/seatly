@@ -6,6 +6,7 @@
 - Introduced dropdown to keep user input sanitized and keep recurrence strictly within the supported bounds.
 - Updated the API client and modal to surface structured conflict errors, so users immediately know which week failed when the backend rejects part of a series.
 - Enforced transactional atomicity for the entire recurring series—checking all slots for conflicts before persisting any—to ensure users never end up with a confusing 'partial' booking state (e.g., successfully booked for weeks 1 & 3, but missing week 2).
+- If seatly was already released, I would be cautious about the breaking change and would recommend a deprecation period to allow time for consumers to migrate. Allow for potential canary release to test the new behavior and API versioning. 
 
 
 ## Booking API (Breaking Change)
